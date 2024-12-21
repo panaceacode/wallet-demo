@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/panaceacode/wallet-demo/services"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -51,14 +52,18 @@ func (c *WalletController) CreateWallet(ctx *gin.Context) {
 }
 
 func (c *WalletController) Deposit(ctx *gin.Context) {
-	walletID := ctx.GetUint("wallet_id")
+	walletID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid wallet id"})
+		return
+	}
 	var req DepositRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := c.walletService.Deposit(walletID, req.Amount, req.TxHash)
+	err = c.walletService.Deposit(uint(walletID), req.Amount, req.TxHash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -68,14 +73,18 @@ func (c *WalletController) Deposit(ctx *gin.Context) {
 }
 
 func (c *WalletController) Withdraw(ctx *gin.Context) {
-	walletID := ctx.GetUint("wallet_id")
+	walletID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid wallet id"})
+		return
+	}
 	var req WithdrawRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := c.walletService.Withdraw(walletID, req.Amount, req.TxHash)
+	err = c.walletService.Withdraw(uint(walletID), req.Amount, req.TxHash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -85,11 +94,23 @@ func (c *WalletController) Withdraw(ctx *gin.Context) {
 }
 
 func (c *WalletController) GetTransactions(ctx *gin.Context) {
-	walletID := ctx.GetUint("wallet_id")
+	walletID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid wallet id"})
+		return
+	}
 	page := ctx.GetInt("page")
 	pageSize := ctx.GetInt("page_size")
 
-	transactions, err := c.walletService.GetTransactions(walletID, page, pageSize)
+	if page == 0 {
+		page = 1
+	}
+
+	if pageSize == 0 {
+		pageSize = 10
+	}
+
+	transactions, err := c.walletService.GetTransactions(uint(walletID), page, pageSize)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -105,7 +126,11 @@ type PerformReconciliationRequest struct {
 }
 
 func (c *WalletController) PerformReconciliation(ctx *gin.Context) {
-	walletID := ctx.GetUint("wallet_id")
+	walletID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid wallet id"})
+		return
+	}
 	var req PerformReconciliationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -113,7 +138,7 @@ func (c *WalletController) PerformReconciliation(ctx *gin.Context) {
 	}
 
 	reconciliation, err := c.reconciliationService.PerformReconciliation(
-		walletID,
+		uint(walletID),
 		req.StartTime,
 		req.EndTime,
 		req.ExternalBalance,
@@ -128,11 +153,15 @@ func (c *WalletController) PerformReconciliation(ctx *gin.Context) {
 }
 
 func (c *WalletController) GetReconciliationHistory(ctx *gin.Context) {
-	walletID := ctx.GetUint("wallet_id")
+	walletID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid wallet id"})
+		return
+	}
 	page := ctx.GetInt("page")
 	pageSize := ctx.GetInt("page_size")
 
-	reconciliations, err := c.reconciliationService.GetReconciliationHistory(walletID, page, pageSize)
+	reconciliations, err := c.reconciliationService.GetReconciliationHistory(uint(walletID), page, pageSize)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -142,9 +171,13 @@ func (c *WalletController) GetReconciliationHistory(ctx *gin.Context) {
 }
 
 func (c *WalletController) GetReconciliationDetail(ctx *gin.Context) {
-	reconciliationID := ctx.GetUint("reconciliation_id")
+	reconciliationID, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid reconciliation id"})
+		return
+	}
 
-	reconciliation, transactions, err := c.reconciliationService.GetReconciliationDetail(reconciliationID)
+	reconciliation, transactions, err := c.reconciliationService.GetReconciliationDetail(uint(reconciliationID))
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
