@@ -1,60 +1,101 @@
+// Package services/wallet_service.go
 package services
 
 import (
-	"fmt"
-	"github.com/panaceacode/wallet-demo/db"
-	"time"
+	"errors"
+	"github.com/panaceacode/wallet-demo/models"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-// 充值入账
-func Deposit(userID int, currency string, amount float64) error {
-	// 检查钱包是否存在
-	var currentBalance float64
-	err := db.DB.QueryRow("SELECT balance FROM wallet WHERE user_id = ? AND currency = ?", userID, currency).Scan(&currentBalance)
-	if err != nil && err.Error() != "sql: no rows in result set" {
-		return fmt.Errorf("failed to check balance: %v", err)
-	}
-
-	if err == nil { // 如果钱包已经存在，则更新余额
-		_, err = db.DB.Exec("UPDATE wallet SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND currency = ?", amount, userID, currency)
-	} else { // 钱包不存在，插入新记录
-		_, err = db.DB.Exec("INSERT INTO wallet (user_id, currency, balance, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", userID, currency, amount)
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to deposit: %v", err)
-	}
-
-	// 记录交易
-	_, err = db.DB.Exec("INSERT INTO transaction_record (user_id, currency, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", userID, currency, amount, "success")
-	if err != nil {
-		return fmt.Errorf("failed to record transaction: %v", err)
-	}
-
-	return nil
+type WalletService struct {
+	db *gorm.DB
 }
 
-// 提币
-func Withdraw(userID int, currency string, amount float64) error {
-	// 检查余额是否足够
-	var balance float64
-	err := db.DB.QueryRow(`
-		SELECT balance FROM wallet WHERE user_id = ? AND currency = ?
-	`, userID, currency).Scan(&balance)
+func NewWalletService(db *gorm.DB) *WalletService {
+	return &WalletService{db: db}
+}
 
+func (s *WalletService) CreateWallet(userID uint, currency string) (*models.Wallet, error) {
+	wallet := &models.Wallet{
+		UserID:   userID,
+		Currency: currency,
+		Balance:  0,
+	}
+
+	err := s.db.Create(wallet).Error
 	if err != nil {
-		return fmt.Errorf("failed to query balance: %w", err)
-	}
-	if balance < amount {
-		return fmt.Errorf("insufficient balance")
+		return nil, err
 	}
 
-	now := time.Now()
-	// 更新钱包余额，并设置更新时间
-	_, err = db.DB.Exec(`
-		UPDATE wallet SET balance = balance - ?, updated_at = ?
-		WHERE user_id = ? AND currency = ?
-	`, amount, now, userID, currency)
+	return wallet, nil
+}
 
-	return err
+func (s *WalletService) GetWallet(userID uint, currency string) (*models.Wallet, error) {
+	var wallet models.Wallet
+	err := s.db.Where("user_id = ? AND currency = ?", userID, currency).First(&wallet).Error
+	if err != nil {
+		return nil, err
+	}
+	return &wallet, nil
+}
+
+func (s *WalletService) Deposit(walletID uint, amount float64, txHash string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var wallet models.Wallet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&wallet, walletID).Error; err != nil {
+			return err
+		}
+
+		balanceBefore := wallet.Balance
+		wallet.Balance += amount
+
+		if err := tx.Save(&wallet).Error; err != nil {
+			return err
+		}
+
+		transaction := models.Transaction{
+			WalletID:      walletID,
+			Type:          models.TransactionDeposit,
+			Amount:        amount,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  wallet.Balance,
+			Status:        "completed",
+			TxHash:        txHash,
+		}
+
+		return tx.Create(&transaction).Error
+	})
+}
+
+func (s *WalletService) Withdraw(walletID uint, amount float64, txHash string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var wallet models.Wallet
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&wallet, walletID).Error; err != nil {
+			return err
+		}
+
+		if wallet.Balance < amount {
+			return errors.New("insufficient balance")
+		}
+
+		balanceBefore := wallet.Balance
+		wallet.Balance -= amount
+
+		if err := tx.Save(&wallet).Error; err != nil {
+			return err
+		}
+
+		transaction := models.Transaction{
+			WalletID:      walletID,
+			Type:          models.TransactionWithdraw,
+			Amount:        amount,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  wallet.Balance,
+			Status:        "completed",
+			TxHash:        txHash,
+		}
+
+		return tx.Create(&transaction).Error
+	})
 }
