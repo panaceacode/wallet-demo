@@ -4,6 +4,7 @@ package controllers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/panaceacode/wallet-demo/services"
+	"github.com/shopspring/decimal"
 	"net/http"
 	"strconv"
 	"time"
@@ -26,13 +27,13 @@ type CreateWalletRequest struct {
 }
 
 type DepositRequest struct {
-	Amount float64 `json:"amount" binding:"required,gt=0"`
-	TxHash string  `json:"tx_hash" binding:"required"`
+	Amount decimal.Decimal `json:"amount" binding:"required,gt=0"`
+	TxHash string          `json:"tx_hash" binding:"required"`
 }
 
 type WithdrawRequest struct {
-	Amount float64 `json:"amount" binding:"required,gt=0"`
-	TxHash string  `json:"tx_hash" binding:"required"`
+	Amount decimal.Decimal `json:"amount" binding:"required,gt=0"`
+	TxHash string          `json:"tx_hash" binding:"required"`
 }
 
 func (c *WalletController) CreateWallet(ctx *gin.Context) {
@@ -102,6 +103,12 @@ func (c *WalletController) GetTransactions(ctx *gin.Context) {
 	page := ctx.GetInt("page")
 	pageSize := ctx.GetInt("page_size")
 
+	//startTime := ctx.GetTime("start_time")
+	//endTime := ctx.GetTime("end_time")
+
+	startTime := time.Time{}
+	endTime := time.Now()
+
 	if page == 0 {
 		page = 1
 	}
@@ -110,7 +117,7 @@ func (c *WalletController) GetTransactions(ctx *gin.Context) {
 		pageSize = 10
 	}
 
-	transactions, err := c.walletService.GetTransactions(uint(walletID), page, pageSize)
+	transactions, err := c.walletService.GetTransactions(uint(walletID), startTime, endTime, page, pageSize)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -120,9 +127,9 @@ func (c *WalletController) GetTransactions(ctx *gin.Context) {
 }
 
 type PerformReconciliationRequest struct {
-	StartTime       time.Time `json:"start_time" binding:"required"`
-	EndTime         time.Time `json:"end_time" binding:"required"`
-	ExternalBalance float64   `json:"external_balance" binding:"required"`
+	StartTime       time.Time       `json:"start_time" binding:"required"`
+	EndTime         time.Time       `json:"end_time" binding:"required"`
+	ExternalBalance decimal.Decimal `json:"external_balance" binding:"required"`
 }
 
 func (c *WalletController) PerformReconciliation(ctx *gin.Context) {

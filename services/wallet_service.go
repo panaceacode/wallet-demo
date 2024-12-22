@@ -4,6 +4,7 @@ package services
 import (
 	"errors"
 	"github.com/panaceacode/wallet-demo/models"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -20,7 +21,7 @@ func (s *WalletService) CreateWallet(userID uint, currency string) (*models.Wall
 	wallet := &models.Wallet{
 		UserID:   userID,
 		Currency: currency,
-		Balance:  0,
+		Balance:  decimal.NewFromFloat(0),
 	}
 
 	err := s.db.Create(wallet).Error
@@ -40,15 +41,26 @@ func (s *WalletService) GetWallet(userID uint, currency string) (*models.Wallet,
 	return &wallet, nil
 }
 
-func (s *WalletService) Deposit(walletID uint, amount float64, txHash string) error {
+func (s *WalletService) Deposit(walletID uint, amount decimal.Decimal, txHash string) error {
+	if amount.LessThan(decimal.Zero) {
+		return errors.New("invalid deposit amount")
+	}
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var wallet models.Wallet
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&wallet, walletID).Error; err != nil {
 			return err
 		}
 
+		// 检查交易哈希是否已存在
+		var existingTx models.Transaction
+		if err := tx.Where("tx_hash = ?", txHash).First(&existingTx).Error; err == nil {
+			return errors.New("transaction already processed")
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
 		balanceBefore := wallet.Balance
-		wallet.Balance += amount
+		wallet.Balance = wallet.Balance.Add(amount)
 
 		if err := tx.Save(&wallet).Error; err != nil {
 			return err
@@ -68,19 +80,27 @@ func (s *WalletService) Deposit(walletID uint, amount float64, txHash string) er
 	})
 }
 
-func (s *WalletService) Withdraw(walletID uint, amount float64, txHash string) error {
+func (s *WalletService) Withdraw(walletID uint, amount decimal.Decimal, txHash string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var wallet models.Wallet
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&wallet, walletID).Error; err != nil {
 			return err
 		}
 
-		if wallet.Balance < amount {
+		if wallet.Balance.LessThan(amount) {
 			return errors.New("insufficient balance")
 		}
 
+		// 检查交易哈希是否已存在
+		var existingTx models.Transaction
+		if err := tx.Where("tx_hash = ?", txHash).First(&existingTx).Error; err == nil {
+			return errors.New("transaction already processed")
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+
 		balanceBefore := wallet.Balance
-		wallet.Balance -= amount
+		wallet.Balance = wallet.Balance.Sub(amount)
 
 		if err := tx.Save(&wallet).Error; err != nil {
 			return err

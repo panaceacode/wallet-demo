@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/panaceacode/wallet-demo/models"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
-	"math"
 	"time"
 )
 
@@ -18,8 +18,8 @@ func NewReconciliationService(db *gorm.DB) *ReconciliationService {
 }
 
 // PerformReconciliation 执行对账操作
-func (s *ReconciliationService) PerformReconciliation(walletID uint, startTime, endTime time.Time, externalBalance float64) (*models.Reconciliation, error) {
-	var systemBalance float64
+func (s *ReconciliationService) PerformReconciliation(walletID uint, startTime, endTime time.Time, externalBalance decimal.Decimal) (*models.Reconciliation, error) {
+	var systemBalance decimal.Decimal
 
 	// 计算系统内的余额变化
 	// 1. 获取开始时间之前的最后一个余额
@@ -32,7 +32,7 @@ func (s *ReconciliationService) PerformReconciliation(walletID uint, startTime, 
 		return nil, err
 	}
 
-	initialBalance := float64(0)
+	initialBalance := decimal.Zero
 	if err == nil {
 		initialBalance = lastTx.BalanceAfter
 	}
@@ -52,16 +52,16 @@ func (s *ReconciliationService) PerformReconciliation(walletID uint, startTime, 
 	systemBalance = initialBalance
 	for _, tx := range transactions {
 		if tx.Type == models.TransactionDeposit {
-			systemBalance += tx.Amount
+			systemBalance = systemBalance.Add(tx.Amount)
 		} else {
-			systemBalance -= tx.Amount
+			systemBalance = systemBalance.Sub(tx.Amount)
 		}
 	}
 
 	// 4. 创建对账记录
-	difference := systemBalance - externalBalance
+	difference := systemBalance.Sub(externalBalance)
 	status := models.ReconciliationStatusMatched
-	if math.Abs(difference) > 0.0001 { // 考虑浮点数精度问题
+	if difference.GreaterThan(decimal.NewFromFloat(0.0001)) { // 考虑浮点数精度问题
 		status = models.ReconciliationStatusMismatch
 	}
 
@@ -114,10 +114,11 @@ func (s *ReconciliationService) GetReconciliationDetail(reconciliationID uint) (
 	return &reconciliation, transactions, err
 }
 
-func (s *WalletService) GetTransactions(walletID uint, page, pageSize int) ([]models.Transaction, error) {
+func (s *WalletService) GetTransactions(walletID uint, startTime, endTime time.Time, page, pageSize int) ([]models.Transaction, error) {
 	var transactions []models.Transaction
 
-	err := s.db.Where("wallet_id = ?", walletID).
+	err := s.db.Where("wallet_id = ? AND created_at BETWEEN ? AND ?",
+		walletID, startTime, endTime).
 		Order("created_at DESC").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).

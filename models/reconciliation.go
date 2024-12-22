@@ -1,7 +1,10 @@
 // Package models models/reconciliation.go
 package models
 
-import "time"
+import (
+	"github.com/shopspring/decimal"
+	"time"
+)
 
 type ReconciliationStatus string
 
@@ -16,9 +19,9 @@ type Reconciliation struct {
 	WalletID        uint                 `gorm:"not null;index"`
 	StartTime       time.Time            `gorm:"not null"`
 	EndTime         time.Time            `gorm:"not null"`
-	SystemBalance   float64              `gorm:"not null"` // 系统计算的余额
-	ExternalBalance float64              `gorm:"not null"` // 外部系统的余额
+	SystemBalance   decimal.Decimal      `gorm:"not null"` // 系统计算的余额
+	ExternalBalance decimal.Decimal      `gorm:"not null"` // 外部系统的余额
 	Status          ReconciliationStatus `gorm:"not null"`
-	Difference      float64              `gorm:"not null"` // 差额
+	Difference      decimal.Decimal      `gorm:"not null"` // 差额
 	Notes           string               `gorm:"type:text"`
 }
