@@ -29,7 +29,7 @@
     - [3.3.3 记账对账](#crypto-wallet-design-core-function-reconciliation)
     - [3.3.4 交易记录查询](#crypto-wallet-design-core-function-transaction)
     - [3.3.5 设计总结与可能的问题](#crypto-wallet-design-core-function-summary-and-problems)
-
+- [4 关于本地测试](#local-test)
 ---
 
 ## **1. 设计背景** {#background}
@@ -778,3 +778,87 @@ func (s *CryptoWalletService) GetTransactions(walletID uint,
 
 #### Transactions 查询分析：
 与传统方式钱包基本一致
+
+## **4 关于本地测试** {#local-test}
+1. 需要安装本地 go 环境
+2. 可以选择 sqlite 或者 mysql 启动，在 main.go 中切换
+3. 下面是一些接口的测试示例：
+   - 创建钱包
+   > curl --location 'http://localhost:8080/api/wallets' \
+   --header 'Content-Type: application/json' \
+   --data '{
+   "user_id": 20241222,
+   "currency": "USD"
+   }'
+    ```plaintext
+   Response:
+    {
+       "ID": 2,
+       "CreatedAt": "2024-12-22T17:15:24.996+08:00",
+       "UpdatedAt": "2024-12-22T17:15:24.996+08:00",
+       "UserID": 20241222,
+       "Currency": "USD",
+       "Balance": "0"
+    }
+    ```
+   - deposit
+   > curl --location 'http://localhost:8080/api/wallets/2/deposit' \
+   --header 'wallet_id: 1' \
+   --header 'Content-Type: application/json' \
+   --data '{
+   "amount": "100",
+   "tx_hash": "bd893a76c1dedb5d41a9c9df4c90df2a41c843c502a9091c827edd3900c975f6"
+   }'
+    ```plaintext
+   Response:
+    {
+       "message": "deposit successful"
+    }
+    ```
+    - withdraw
+   > curl --location 'http://localhost:8080/api/wallets/2/withdraw' \
+   --header 'wallet_id: 1' \
+   --header 'Content-Type: application/json' \
+   --data '{
+   "amount": "50",
+   "tx_hash": "bd893a76c1dedb5d41a9c9df4c90df2a41c843c502a9091c827edd3900c975f5"
+   }'
+    ```plaintext
+   Response:
+    {
+       "message": "withdrawal successful"
+    }
+    ```
+    - get transaction
+   > curl --location 'http://localhost:8080/api/wallets/2/transactions'
+    ```plaintext
+   Response:
+    [
+        {
+            "ID": 4,
+            "CreatedAt": "2024-12-22T17:30:32.664+08:00",
+            "UpdatedAt": "2024-12-22T17:30:32.664+08:00",
+            "WalletID": 2,
+            "Type": "withdraw",
+            "Amount": "50",
+            "BalanceBefore": "100",
+            "BalanceAfter": "50",
+            "Status": "completed",
+            "TxHash": "bd893a76c1dedb5d41a9c9df4c90df2a41c843c502a9091c827edd3900c975f5",
+            "Description": ""
+        },
+        {
+            "ID": 3,
+            "CreatedAt": "2024-12-22T17:28:29.362+08:00",
+            "UpdatedAt": "2024-12-22T17:28:29.362+08:00",
+            "WalletID": 2,
+            "Type": "deposit",
+            "Amount": "100",
+            "BalanceBefore": "0",
+            "BalanceAfter": "100",
+            "Status": "completed",
+            "TxHash": "bd893a76c1dedb5d41a9c9df4c90df2a41c843c502a9091c827edd3900c975f6",
+            "Description": ""
+        }
+    ]
+    ```

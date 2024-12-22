@@ -27,13 +27,13 @@ type CreateWalletRequest struct {
 }
 
 type DepositRequest struct {
-	Amount decimal.Decimal `json:"amount" binding:"required,gt=0"`
-	TxHash string          `json:"tx_hash" binding:"required"`
+	Amount string `json:"amount" binding:"required,gt=0"`
+	TxHash string `json:"tx_hash" binding:"required"`
 }
 
 type WithdrawRequest struct {
-	Amount decimal.Decimal `json:"amount" binding:"required,gt=0"`
-	TxHash string          `json:"tx_hash" binding:"required"`
+	Amount string `json:"amount" binding:"required,gt=0"`
+	TxHash string `json:"tx_hash" binding:"required"`
 }
 
 func (c *WalletController) CreateWallet(ctx *gin.Context) {
@@ -64,7 +64,8 @@ func (c *WalletController) Deposit(ctx *gin.Context) {
 		return
 	}
 
-	err = c.walletService.Deposit(uint(walletID), req.Amount, req.TxHash)
+	amount, err := decimal.NewFromString(req.Amount)
+	err = c.walletService.Deposit(uint(walletID), amount, req.TxHash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -85,7 +86,8 @@ func (c *WalletController) Withdraw(ctx *gin.Context) {
 		return
 	}
 
-	err = c.walletService.Withdraw(uint(walletID), req.Amount, req.TxHash)
+	amount, err := decimal.NewFromString(req.Amount)
+	err = c.walletService.Withdraw(uint(walletID), amount, req.TxHash)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
